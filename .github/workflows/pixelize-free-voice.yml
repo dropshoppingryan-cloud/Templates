@@ -1,0 +1,61 @@
+name: Pixelize Free Voice
+on:
+  push:
+    branches:
+      - pixelize-free-voice-temp
+  workflow_dispatch:
+
+jobs:
+  generate-voice:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install neural TTS
+        run: python -m pip install --quiet edge-tts
+      - name: Generate premium French voiceover
+        shell: bash
+        run: |
+          cat > /tmp/generate_voice.py <<'PY'
+          import asyncio
+          import edge_tts
+
+          TEXT = """Aujourd’hui, quand un client cherche un artisan, il commence souvent par Google. Avec Pixelize, votre site est pensé pour votre métier, votre zone et le référencement SEO local, afin d’apparaître là où vos futurs clients vous cherchent, sur Google et Google Maps. Votre site reste rapide, professionnel, adapté au mobile, et vos futures modifications sont prises en charge sans supplément. Et si vous voulez accélérer, nos campagnes Google Ads sont pilotées par un expert pour générer davantage de demandes qualifiées. Vous gérez vos chantiers. Pixelize s’occupe de votre visibilité."""
+
+          async def main():
+              voices = await edge_tts.list_voices()
+              names = {v["ShortName"] for v in voices}
+              preferred = [
+                  "fr-FR-RemyMultilingualNeural",
+                  "fr-FR-HenriNeural",
+                  "fr-FR-DeniseNeural",
+                  "fr-FR-EloiseNeural",
+              ]
+              voice = next((v for v in preferred if v in names), None)
+              if not voice:
+                  french = [v["ShortName"] for v in voices if v.get("Locale") == "fr-FR"]
+                  if not french:
+                      raise RuntimeError("No French neural voice available")
+                  voice = french[0]
+              print("VOICE_SELECTED=" + voice)
+              communicate = edge_tts.Communicate(
+                  TEXT,
+                  voice,
+                  rate="+8%",
+                  volume="+0%",
+                  pitch="-2Hz",
+              )
+              await communicate.save("pixelize-voiceover.mp3")
+
+          asyncio.run(main())
+          PY
+          python /tmp/generate_voice.py
+          ls -lh pixelize-voiceover.mp3
+      - name: Upload voiceover
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixelize-voiceover
+          path: pixelize-voiceover.mp3
+          if-no-files-found: error
+          retention-days: 1
